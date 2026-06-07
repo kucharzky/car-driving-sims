@@ -33,6 +33,40 @@ car-driving-sims/
 └── STEPS.md            # Detailed design and implementation notes
 ```
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph entry [Entry]
+        main[main.py]
+    end
+
+    subgraph world [World]
+        tm[track_manager.py]
+        env[environment.py]
+        car[car.py]
+    end
+
+    subgraph brain [RL Brain]
+        agent[agent.py]
+    end
+
+    cfg[config.py]
+
+    main --> env
+    main --> agent
+    cfg --> tm
+    cfg --> car
+    cfg --> env
+    cfg --> agent
+
+    tm -->|masks, spawn, lap detection| env
+    car -->|bicycle physics, sensors| env
+    env -->|state, reward, done| agent
+    agent -->|discrete actions| env
+    env -->|pygame render| main
+```
+
 ## Requirements
 
 - **Python 3.10+** (developed and tested with 3.13)
