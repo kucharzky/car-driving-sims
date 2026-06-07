@@ -11,11 +11,13 @@ A lightweight 2D autonomous driving simulator built with **Python**, **Pygame**,
 
 ## Tech Stack
 
-| Layer | Library |
-|-------|---------|
-| Simulation & UI | Pygame |
-| Vision | OpenCV, NumPy |
-| Machine Learning | PyTorch |
+
+| Layer            | Library       |
+| ---------------- | ------------- |
+| Simulation & UI  | Pygame        |
+| Vision           | OpenCV, NumPy |
+| Machine Learning | PyTorch       |
+
 
 ## Project Structure
 
@@ -67,6 +69,8 @@ flowchart TB
     env -->|pygame render| main
 ```
 
+
+
 ## Requirements
 
 - **Python 3.10+** (developed and tested with 3.13)
@@ -76,7 +80,7 @@ flowchart TB
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/car-driving-sims.git
+git clone https://github.com/kucharzky/car-driving-sims.git
 cd car-driving-sims
 
 # Create and activate virtual environment
@@ -102,14 +106,31 @@ Drive with the keyboard on a PNG or procedurally generated track:
 python main.py --mode manual
 ```
 
-| Key | Action |
-|-----|--------|
-| `W` | Accelerate |
-| `S` | Brake / reverse |
-| `A` | Steer left |
-| `D` | Steer right |
-| `R` | Reset to start line |
-| `ESC` | Quit |
+
+| Key   | Action              |
+| ----- | ------------------- |
+| `W`   | Accelerate          |
+| `S`   | Brake / reverse     |
+| `A`   | Steer left          |
+| `D`   | Steer right         |
+| `R`   | Reset to start line |
+| `V`   | Toggle sensor debug (rays + OpenCV windows) |
+| `ESC` | Quit                |
+
+### Sensor debug (Phase 2)
+
+With sensors enabled (default), you get:
+
+- **LiDAR rays** overlaid on the track (red = close wall, green = clear)
+- **Ray bars** at the bottom of the main window
+- **Vision Crop** — car-centric oriented view (heading up)
+- **Vision Stack** — 2×2 grid of the 4-frame binary stack fed to the CNN
+
+```bash
+python main.py --mode manual
+python main.py --mode manual --no-debug-sensors   # hide overlays
+```
+
 
 ### Track options
 
@@ -128,22 +149,23 @@ python main.py --mode manual --track procedural
 
 When drawing a custom track image, use these exact colors:
 
-| Color | RGB | Meaning |
-|-------|-----|---------|
-| White | `(255, 255, 255)` | Driveable road |
-| Black | `(0, 0, 0)` | Walls / obstacles |
-| Green | `(0, 255, 0)` | Start / finish line |
+
+| Color | RGB               | Meaning             |
+| ----- | ----------------- | ------------------- |
+| White | `(255, 255, 255)` | Driveable road      |
+| Black | `(0, 0, 0)`       | Walls / obstacles   |
+| Green | `(0, 255, 0)`     | Start / finish line |
+
 
 ## Development Phases
 
-| Phase | Status | Scope |
-|-------|--------|-------|
-| **1 — Sandbox** | In progress | Config, track loading, manual WASD driving |
-| **2 — Sensors** | Planned | Raycasting, OpenCV frame stack preview |
-| **3 — RL Loop** | Planned | Environment, DQN agent, training & inference |
+
+| Phase           | Status      | Scope                                        |
+| --------------- | ----------- | -------------------------------------------- |
+| **1 — Sandbox** | Complete    | Config, track loading, manual WASD driving   |
+| **2 — Sensors** | Complete    | Raycasting, OpenCV frame stack preview       |
+| **3 — RL Loop** | Planned     | Environment, DQN agent, training & inference |
+
 
 See [STEPS.md](STEPS.md) for physics equations, reward design, and neural network architecture.
 
-## License
-
-MIT — see [LICENSE](LICENSE) if present, or add your preferred license.

@@ -44,6 +44,18 @@ COLOR_TOLERANCE = 30
 # Procedural generation
 PROCEDURAL_CONTROL_POINTS = 8
 PROCEDURAL_MARGIN = 120   # inset from screen edges for control points
+START_FINISH_LINE_WIDTH = 6
+
+# Lap detection
+SPAWN_OFFSET_BEFORE_LINE = 55.0   # px behind finish line at race start
+MIN_LAP_DISTANCE_FLOOR = 200.0    # absolute minimum outside-zone travel
+LAP_DISTANCE_FRACTION = 0.42      # fraction of estimated circuit length required
+MIN_LAP_ANGLE_PROGRESS = 3.5      # radians (~200°) rotation around track center
+LAP_FAR_DISTANCE_FRACTION = 0.72  # must reach far side of track from finish line
+LAP_HEADING_TOLERANCE = 0.75      # radians (~43°) — same direction, slight steer OK
+FINISH_ZONE_RADIUS = 38.0         # px — proximity to green line counts as finish zone
+MIN_CLEAR_START_DISTANCE = 25.0   # px — must leave start area before laps arm
+MIN_FORWARD_DOT = 0.35            # movement must align with race direction on entry
 
 # ---------------------------------------------------------------------------
 # Vision (Phase 2+)
@@ -51,6 +63,8 @@ PROCEDURAL_MARGIN = 120   # inset from screen edges for control points
 VISION_SIZE = 84
 FRAME_STACK = 4
 VISION_CROP_SIZE = 200
+RAY_COLOR_NEAR = (255, 80, 80)
+RAY_COLOR_FAR = (80, 220, 120)
 
 # ---------------------------------------------------------------------------
 # Raycasting (Phase 2+)

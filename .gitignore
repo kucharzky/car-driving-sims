@@ -54,3 +54,4 @@ coverage.xml
 .ipynb_checkpoints/
 
 .cursor/
+.debug/

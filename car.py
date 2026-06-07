@@ -1,17 +1,23 @@
-"""Vehicle kinematics (bicycle model) and rendering."""
+"""Vehicle kinematics (bicycle model), sensors, and rendering."""
 
 from __future__ import annotations
 
 import math
-from typing import Tuple
+from collections import deque
+from typing import TYPE_CHECKING, Tuple
 
+import cv2
+import numpy as np
 import pygame
 
 import config
 
+if TYPE_CHECKING:
+    from track_manager import TrackManager
+
 
 class Car:
-    """2D kinematic bicycle model with keyboard input support."""
+    """2D kinematic bicycle model with raycasting and vision sensors."""
 
     def __init__(
         self,
@@ -26,6 +32,9 @@ class Car:
         self.steer_angle = 0.0
         self._prev_x = x
         self._prev_y = y
+        self._ray_distances: list[float] = [1.0] * config.RAY_COUNT
+        self._frame_stack: deque[np.ndarray] = deque(maxlen=config.FRAME_STACK)
+        self._last_crop_rgb: np.ndarray | None = None
 
     # ------------------------------------------------------------------
     # Physics
@@ -38,7 +47,6 @@ class Car:
         elif keys[pygame.K_d]:
             self.steer_angle += config.STEER_RATE
         else:
-            # Return steering toward center
             if self.steer_angle > 0:
                 self.steer_angle = max(0.0, self.steer_angle - config.STEER_RATE * 0.5)
             elif self.steer_angle < 0:
@@ -54,7 +62,6 @@ class Car:
         elif keys[pygame.K_s]:
             self.velocity -= config.MAX_BRAKING
         else:
-            # Light friction
             if self.velocity > 0:
                 self.velocity = max(0.0, self.velocity - config.MAX_BRAKING * 0.15)
             elif self.velocity < 0:
@@ -95,6 +102,105 @@ class Car:
         self.steer_angle = 0.0
         self._prev_x = x
         self._prev_y = y
+        self._frame_stack.clear()
+        self._last_crop_rgb = None
+
+    # ------------------------------------------------------------------
+    # Sensors
+    # ------------------------------------------------------------------
+
+    def update_sensors(self, track: TrackManager) -> None:
+        """Refresh ray distances and push a new vision frame onto the stack."""
+        self._ray_distances = self.cast_rays(track)
+        frame = self.capture_vision_frame(track)
+        self._frame_stack.append(frame)
+
+    def cast_rays(self, track: TrackManager) -> list[float]:
+        """Cast rays from the nose; return normalized distances in [0, 1]."""
+        ox, oy = self.get_nose()
+        distances: list[float] = []
+        for deg in config.RAY_ANGLES_DEG:
+            angle = self.heading + math.radians(deg)
+            raw = track.raycast((ox, oy), angle, config.RAY_MAX_DISTANCE)
+            distances.append(min(1.0, raw / config.RAY_MAX_DISTANCE))
+        return distances
+
+    def get_ray_distances(self) -> list[float]:
+        """Latest normalized ray distances."""
+        return list(self._ray_distances)
+
+    def _extract_oriented_crop(self, track: TrackManager) -> pygame.Surface:
+        """Car-centric top-down crop from the track surface (heading points up)."""
+        assert track.surface is not None
+        size = config.VISION_CROP_SIZE
+        crop = pygame.Surface((size, size))
+        crop.fill(config.TRACK_COLOR_WALL)
+
+        half = size // 2
+        crop.blit(track.surface, (half - int(self.x), half - int(self.y)))
+
+        rotation = math.degrees(self.heading) - 90.0
+        rotated = pygame.transform.rotozoom(crop, -rotation, 1.0)
+        centered = pygame.Surface((size, size))
+        centered.fill(config.TRACK_COLOR_WALL)
+        rect = rotated.get_rect(center=(half, half))
+        centered.blit(rotated, rect)
+        return centered
+
+    def capture_vision_frame(self, track: TrackManager) -> np.ndarray:
+        """OpenCV pipeline: crop → grayscale → 84×84 binary road mask in [0, 1]."""
+        crop = self._extract_oriented_crop(track)
+        rgb = pygame.surfarray.array3d(crop).transpose(1, 0, 2)
+        self._last_crop_rgb = rgb.copy()
+
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        resized = cv2.resize(
+            gray,
+            (config.VISION_SIZE, config.VISION_SIZE),
+            interpolation=cv2.INTER_AREA,
+        )
+        _, binary = cv2.threshold(resized, 127, 1.0, cv2.THRESH_BINARY)
+        return binary.astype(np.float32)
+
+    def get_vision_stack(self) -> np.ndarray:
+        """Return stacked frames as (FRAME_STACK, 84, 84) float32."""
+        if not self._frame_stack:
+            return np.zeros(
+                (config.FRAME_STACK, config.VISION_SIZE, config.VISION_SIZE),
+                dtype=np.float32,
+            )
+
+        frames = list(self._frame_stack)
+        while len(frames) < config.FRAME_STACK:
+            frames.insert(0, frames[0])
+        return np.stack(frames[-config.FRAME_STACK :], axis=0)
+
+    def get_state_vector(self) -> np.ndarray:
+        """Concatenated sensor vector: normalized rays (for RL in Phase 3)."""
+        return np.array(self._ray_distances, dtype=np.float32)
+
+    @property
+    def frame_stack_count(self) -> int:
+        return len(self._frame_stack)
+
+    def get_crop_rgb(self) -> np.ndarray | None:
+        """Latest oriented crop for debug preview (H, W, 3) RGB."""
+        return self._last_crop_rgb
+
+    def get_stack_preview_bgr(self, scale: int = 4) -> np.ndarray | None:
+        """2×2 grid of stacked frames for cv2.imshow."""
+        stack = self.get_vision_stack()
+        if stack.size == 0:
+            return None
+
+        tiles = [stack[i] for i in range(config.FRAME_STACK)]
+        top = np.hstack([tiles[0], tiles[1]])
+        bottom = np.hstack([tiles[2], tiles[3]])
+        grid = np.vstack([top, bottom])
+        preview = (grid * 255).astype(np.uint8)
+        preview = cv2.cvtColor(preview, cv2.COLOR_GRAY2BGR)
+        edge = config.VISION_SIZE * scale
+        return cv2.resize(preview, (edge, edge), interpolation=cv2.INTER_NEAREST)
 
     # ------------------------------------------------------------------
     # Geometry
@@ -124,6 +230,17 @@ class Car:
     def get_prev_center(self) -> Tuple[float, float]:
         return (self._prev_x, self._prev_y)
 
+    def get_nose(self) -> Tuple[float, float]:
+        """Front bumper position."""
+        nx = self.x + (config.CAR_LENGTH / 2) * math.cos(self.heading)
+        ny = self.y + (config.CAR_LENGTH / 2) * math.sin(self.heading)
+        return (nx, ny)
+
+    def get_prev_nose(self) -> Tuple[float, float]:
+        px = self._prev_x + (config.CAR_LENGTH / 2) * math.cos(self.heading)
+        py = self._prev_y + (config.CAR_LENGTH / 2) * math.sin(self.heading)
+        return (px, py)
+
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------
@@ -134,7 +251,17 @@ class Car:
         pygame.draw.polygon(surface, (30, 120, 220), points)
         pygame.draw.polygon(surface, (10, 40, 80), points, 2)
 
-        # Nose marker
-        nose_x = self.x + (config.CAR_LENGTH / 2) * math.cos(self.heading)
-        nose_y = self.y + (config.CAR_LENGTH / 2) * math.sin(self.heading)
+        nose_x, nose_y = self.get_nose()
         pygame.draw.circle(surface, (255, 220, 50), (int(nose_x), int(nose_y)), 4)
+
+    def render_rays(self, surface: pygame.Surface) -> None:
+        """Draw LiDAR rays on the main track view."""
+        ox, oy = self.get_nose()
+        for deg, norm_dist in zip(config.RAY_ANGLES_DEG, self._ray_distances):
+            angle = self.heading + math.radians(deg)
+            dist = norm_dist * config.RAY_MAX_DISTANCE
+            ex = ox + math.cos(angle) * dist
+            ey = oy + math.sin(angle) * dist
+            color = config.RAY_COLOR_NEAR if norm_dist < 0.35 else config.RAY_COLOR_FAR
+            pygame.draw.line(surface, color, (int(ox), int(oy)), (int(ex), int(ey)), 2)
+            pygame.draw.circle(surface, color, (int(ex), int(ey)), 4)
