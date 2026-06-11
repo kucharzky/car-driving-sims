@@ -40,6 +40,41 @@ class Car:
     # Physics
     # ------------------------------------------------------------------
 
+    def apply_action(self, action: int) -> None:
+        """Apply combined steer + throttle action for one simulation step."""
+        steer_left = action in (config.ACTION_ACCEL_LEFT, config.ACTION_COAST_LEFT)
+        steer_right = action in (config.ACTION_ACCEL_RIGHT, config.ACTION_COAST_RIGHT)
+        accelerate = action in (
+            config.ACTION_ACCEL_STRAIGHT,
+            config.ACTION_ACCEL_LEFT,
+            config.ACTION_ACCEL_RIGHT,
+        )
+        brake = action == config.ACTION_BRAKE
+
+        if steer_left:
+            self.steer_angle -= config.STEER_RATE
+        elif steer_right:
+            self.steer_angle += config.STEER_RATE
+        else:
+            if self.steer_angle > 0:
+                self.steer_angle = max(0.0, self.steer_angle - config.STEER_RATE * 0.5)
+            elif self.steer_angle < 0:
+                self.steer_angle = min(0.0, self.steer_angle + config.STEER_RATE * 0.5)
+
+        self.steer_angle = max(
+            -config.MAX_STEER_ANGLE,
+            min(config.MAX_STEER_ANGLE, self.steer_angle),
+        )
+
+        if accelerate:
+            self.velocity += config.MAX_ACCELERATION
+        elif brake:
+            self.velocity = max(0.0, self.velocity - config.MAX_BRAKING)
+        elif self.velocity > 0:
+            self.velocity = max(0.0, self.velocity - config.MAX_BRAKING * 0.15)
+
+        self.velocity = min(config.MAX_SPEED, max(0.0, self.velocity))
+
     def apply_keyboard(self, keys: pygame.key.ScancodeWrapper) -> None:
         """Update steering and throttle from WASD keys."""
         if keys[pygame.K_a]:
@@ -60,17 +95,11 @@ class Car:
         if keys[pygame.K_w]:
             self.velocity += config.MAX_ACCELERATION
         elif keys[pygame.K_s]:
-            self.velocity -= config.MAX_BRAKING
-        else:
-            if self.velocity > 0:
-                self.velocity = max(0.0, self.velocity - config.MAX_BRAKING * 0.15)
-            elif self.velocity < 0:
-                self.velocity = min(0.0, self.velocity + config.MAX_BRAKING * 0.15)
+            self.velocity = max(0.0, self.velocity - config.MAX_BRAKING)
+        elif self.velocity > 0:
+            self.velocity = max(0.0, self.velocity - config.MAX_BRAKING * 0.15)
 
-        self.velocity = max(
-            -config.MAX_REVERSE_SPEED,
-            min(config.MAX_SPEED, self.velocity),
-        )
+        self.velocity = min(config.MAX_SPEED, max(0.0, self.velocity))
 
     def update(self, dt: float = config.DT) -> None:
         """Advance state using the kinematic bicycle equations."""

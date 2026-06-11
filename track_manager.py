@@ -60,6 +60,13 @@ class LapTracker:
         rx, ry = self._track.race_direction
         return hx * rx + hy * ry >= config.MIN_FORWARD_DOT
 
+    def _step_distance(self, car: Car) -> float:
+        return math.hypot(car.x - car._prev_x, car.y - car._prev_y)
+
+    def _is_moving_forward(self, car: Car) -> bool:
+        """True when the car is driving forward, not in reverse."""
+        return car.velocity >= 0.0
+
     def _is_forward_entry(self, car: Car) -> bool:
         dx = car.x - car._prev_x
         dy = car.y - car._prev_y
@@ -105,29 +112,36 @@ class LapTracker:
         center = car.get_center()
         in_zone = self._track.in_finish_zone(*nose) or self._track.in_finish_zone(*center)
 
-        step_dist = math.hypot(car.x - car._prev_x, car.y - car._prev_y)
+        step_dist = self._step_distance(car)
 
-        if not in_zone:
-            self._distance_before_arm += step_dist
+        if not in_zone and step_dist > 0.01:
+            if self._is_moving_forward(car):
+                self._distance_before_arm += step_dist
+
+                if self._armed:
+                    self._distance_outside += step_dist
+                    center_angle = self._track.angle_from_center(car.x, car.y)
+                    if self._last_center_angle is not None:
+                        self._angle_progress += abs(
+                            self._angle_diff(center_angle, self._last_center_angle)
+                        )
+                    self._last_center_angle = center_angle
+                    self._max_far_from_finish = max(
+                        self._max_far_from_finish,
+                        self._track.distance_from_finish_center(car.x, car.y),
+                    )
+            else:
+                self._distance_before_arm = max(0.0, self._distance_before_arm - step_dist)
+                if self._armed:
+                    self._distance_outside = max(0.0, self._distance_outside - step_dist)
+                    self._last_center_angle = self._track.angle_from_center(car.x, car.y)
+
             if not self._armed and self._distance_before_arm >= config.MIN_CLEAR_START_DISTANCE:
                 self._armed = True
                 self._distance_outside = 0.0
                 self._angle_progress = 0.0
                 self._last_center_angle = None
                 self._max_far_from_finish = 0.0
-
-            if self._armed:
-                self._distance_outside += step_dist
-                center_angle = self._track.angle_from_center(car.x, car.y)
-                if self._last_center_angle is not None:
-                    self._angle_progress += abs(
-                        self._angle_diff(center_angle, self._last_center_angle)
-                    )
-                self._last_center_angle = center_angle
-                self._max_far_from_finish = max(
-                    self._max_far_from_finish,
-                    self._track.distance_from_finish_center(car.x, car.y),
-                )
 
         exited_zone = not in_zone and self._was_in_zone
         if exited_zone:

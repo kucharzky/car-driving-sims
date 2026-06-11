@@ -164,8 +164,30 @@ When drawing a custom track image, use these exact colors:
 | --------------- | ----------- | -------------------------------------------- |
 | **1 — Sandbox** | Complete    | Config, track loading, manual WASD driving   |
 | **2 — Sensors** | Complete    | Raycasting, OpenCV frame stack preview       |
-| **3 — RL Loop** | Planned     | Environment, DQN agent, training & inference |
+| **3 — RL Loop** | Complete    | Environment, DQN agent, training & inference |
 
 
-See [STEPS.md](STEPS.md) for physics equations, reward design, and neural network architecture.
+### RL training (Phase 3)
+
+Train the CNN-DQN agent headlessly (fast) or with rendering:
+
+```bash
+# Train (headless, saves best weights to checkpoints/best_agent.pth)
+python main.py --mode train --episodes 500
+
+# Train with visualization
+python main.py --mode train --episodes 200 --render-train
+
+# Watch a trained agent drive
+python main.py --mode play --checkpoint checkpoints/best_agent.pth
+```
+
+**Reward design:** path distance on road, lap-progress deltas, wall-proximity penalty (LiDAR), speed bonus when clear, idle penalty, -80 crash, +500 lap.
+
+**Actions (6 combined):** accel+straight, accel+left, accel+right, coast left, coast right, brake.
+
+**Agent:** Hybrid CNN (vision stack) + LiDAR rays, Double DQN. Best checkpoint saved by **lap progress %**, not raw reward.
+
+See [STEPS.md](STEPS.md) for physics equations, reward design, and neural network architecture.  
+See [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) for issue history, parameter changes, and training conclusions.
 
